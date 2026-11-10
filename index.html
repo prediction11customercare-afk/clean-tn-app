@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Clean TamilNadu / தூய்மையான தமிழ்நாடு</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- GOOGLE MAPS API SCRIPT with the provided API Key -->
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyD6ppOCXq-PHRtjecE6zThOoEx6iTK3UrA"></script>
+
+    <!-- Phosphor Icons -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Mukta+Malar:wght@400;600;700&display=swap');
+        
+        body {
+            font-family: 'Inter', 'Mukta Malar', sans-serif;
+            background-color: #f3f4f6;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        #map {
+            height: calc(100vh - 220px);
+            width: 100%;
+            z-index: 10;
+            background-color: #e2e8f0;
+        }
+
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3b82f6;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        /* Hide file input */
+        #camera-input {
+            display: none;
+        }
+    </style>
+</head>
+<body class="flex flex-col h-screen overflow-hidden text-slate-800">
+
+    <!-- Top Header -->
+    <header class="bg-blue-600 text-white p-4 shadow-md z-20 flex justify-between items-center relative">
+        <div>
+            <h1 class="text-xl font-bold" id="app-title">Clean TamilNadu</h1>
+            <p class="text-xs text-blue-200" id="app-subtitle">Real-time Civic Reporting</p>
+        </div>
+        <div class="flex items-center gap-2">
+            <button id="btn-dashboard" class="bg-white/20 hover:bg-white/30 px-3 py-1 rounded-full text-sm font-medium transition-colors flex items-center">
+                <i class="ph ph-chart-bar mr-1"></i> <span id="lang-dashboard">Dashboard</span>
+            </button>
+            <button id="lang-toggle" class="bg-white/20 hover:bg-white/30 px-3 py-1 rounded-full text-sm font-medium transition-colors">
+                தமிழ்
+            </button>
+        </div>
+    </header>
+
+    <!-- Dashboard Stats -->
+    <div class="bg-white px-4 py-3 shadow-sm z-20 grid grid-cols-4 gap-2 text-center text-xs sm:text-sm border-b">
+        <div class="flex flex-col items-center">
+            <span class="font-bold text-lg text-orange-500" id="count-garbage">0</span>
+            <span class="text-slate-500" id="label-garbage-count">Garbage</span>
+        </div>
+        <div class="flex flex-col items-center">
+            <span class="font-bold text-lg text-amber-700" id="count-sewage">0</span>
+            <span class="text-slate-500" id="label-sewage-count">Sewage</span>
+        </div>
+        <div class="flex flex-col items-center">
+            <span class="font-bold text-lg text-blue-500" id="count-water">0</span>
+            <span class="text-slate-500" id="label-water-count">Pond/River</span>
+        </div>
+        <div class="flex flex-col items-center">
+            <span class="font-bold text-lg text-purple-600" id="count-banner">0</span>
+            <span class="text-slate-500" id="label-banner-count">Banners</span>
+        </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="flex overflow-x-auto bg-white shadow-sm z-20 hide-scrollbar" id="tabs-container">
+        <button class="tab-btn flex-1 py-3 px-4 text-sm font-medium border-b-2 border-blue-600 text-blue-600 whitespace-nowrap" data-tab="garbage">
+            <i class="ph ph-trash mr-1"></i> <span id="tab-garbage">Garbage</span>
+        </button>
+        <button class="tab-btn flex-1 py-3 px-4 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700 whitespace-nowrap" data-tab="sewage">
+            <i class="ph ph-waves mr-1"></i> <span id="tab-sewage">Sewage</span>
+        </button>
+        <button class="tab-btn flex-1 py-3 px-4 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700 whitespace-nowrap" data-tab="water">
+            <i class="ph ph-drop mr-1"></i> <span id="tab-water">Pond/River</span>
+        </button>
+        <button class="tab-btn flex-1 py-3 px-4 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700 whitespace-nowrap" data-tab="banner">
+            <i class="ph ph-flag-banner mr-1"></i> <span id="tab-banner">Banners</span>
+        </button>
+    </div>
+
+    <!-- Map Container -->
+    <div class="flex-1 relative">
+        <div id="map" class="flex flex-col items-center justify-center text-center p-6 text-slate-500">
+            <!-- Map will inject here, or error message if API key fails -->
+            <i class="ph ph-circle-notch animate-spin text-3xl mb-2"></i>
+            <p>Loading Map...</p>
+        </div>
+        
+        <!-- Floating Camera Button -->
+        <button id="fab-camera" class="absolute bottom-6 left-1/2 transform -translate-x-1/2 bg-blue-600 hover:bg-blue-700 text-white rounded-full p-4 shadow-lg z-[400] transition-transform active:scale-95 flex items-center justify-center border-4 border-white hidden">
+            <i class="ph-fill ph-camera text-3xl"></i>
+        </button>
+        <input type="file" id="camera-input" accept="image/*" capture="environment">
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="fixed inset-0 bg-slate-900/80 z-[1000] hidden flex-col items-center justify-center text-white px-4 text-center">
+        <div class="loader mb-4"></div>
+        <h2 class="text-xl font-semibold mb-2" id="loading-title">Processing...</h2>
+        <p class="text-sm text-slate-300" id="loading-desc">Verifying location and checking for PII</p>
+    </div>
+
+    <!-- Message Modal -->
+    <div id="message-modal" class="fixed inset-0 bg-slate-900/60 z-[1000] hidden items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-xl max-w-sm w-full p-6 text-center transform transition-all">
+            <div id="message-icon" class="text-4xl mb-4"></div>
+            <h3 id="message-title" class="text-lg font-bold text-slate-800 mb-2"></h3>
+            <p id="message-body" class="text-slate-600 text-sm mb-6"></p>
+            <button id="message-close" class="bg-blue-600 text-white font-medium py-2 px-6 rounded-lg w-full hover:bg-blue-700">OK</button>
+        </div>
+    </div>
+
+    <!-- Dashboard Overlay -->
+    <div id="dashboard-overlay" class="fixed inset-0 bg-slate-50 z-[1000] hidden flex-col h-full w-full overflow-hidden">
+        <header class="bg-blue-600 text-white p-4 shadow-md flex justify-between items-center shrink-0">
+            <h1 class="text-xl font-bold" id="dash-title">Dashboard</h1>
+            <button id="close-dashboard" class="text-white hover:bg-blue-700 p-2 rounded-full transition-colors">
+                <i class="ph ph-x text-xl"></i>
+            </button>
+        </header>
+        <div class="flex-1 overflow-y-auto p-4">
+            <h2 class="text-lg font-bold text-slate-800 mb-3" id="dash-overall">Overall Information</h2>
+            
+            <div class="bg-white rounded-xl shadow-sm border p-4 mb-6 grid grid-cols-2 gap-4 text-center">
+                <div class="flex flex-col items-center p-2 bg-orange-50 rounded-lg">
+                    <span class="font-bold text-2xl text-orange-500" id="dash-count-garbage">0</span>
+                    <span class="text-sm font-medium text-slate-600" id="dash-label-garbage">Garbage</span>
+                </div>
+                <div class="flex flex-col items-center p-2 bg-amber-50 rounded-lg">
+                    <span class="font-bold text-2xl text-amber-700" id="dash-count-sewage">0</span>
+                    <span class="text-sm font-medium text-slate-600" id="dash-label-sewage">Sewage</span>
+                </div>
+                <div class="flex flex-col items-center p-2 bg-blue-50 rounded-lg">
+                    <span class="font-bold text-2xl text-blue-500" id="dash-count-water">0</span>
+                    <span class="text-sm font-medium text-slate-600" id="dash-label-water">Pond/River</span>
+                </div>
+                <div class="flex flex-col items-center p-2 bg-purple-50 rounded-lg">
+                    <span class="font-bold text-2xl text-purple-600" id="dash-count-banner">0</span>
+                    <span class="text-sm font-medium text-slate-600" id="dash-label-banner">Banners</span>
+                </div>
+            </div>
+            
+            <h2 class="text-lg font-bold text-slate-800 mb-3" id="dash-districtwise">District-wise Information</h2>
+            <div id="district-list" class="flex flex-col gap-3 pb-8">
+                <!-- District items injected here -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global Google Maps Auth Failure Handler
+        window.gm_authFailure = function() {
+            const mapDiv = document.getElementById('map');
+            mapDiv.innerHTML = `
+                <i class="ph ph-warning-circle text-red-500 text-4xl mb-2"></i>
+                <h3 class="text-lg font-bold text-slate-800">Map Authentication Failed</h3>
+                <p class="text-sm mt-2 text-slate-600">The provided Google Maps API key is invalid or restricted incorrectly.</p>
+                <p class="text-sm mt-1 text-slate-600">Please check your Google Cloud Console billing and API restrictions.</p>
+            `;
+            document.getElementById('fab-camera').classList.add('hidden');
+        };
+    </script>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // ==========================================
+        // 1. Configuration & Global State
+        // ==========================================
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'clean-tn-app-123';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
+            apiKey: "dummy", projectId: "dummy"
+        };
+        
+        let app, db, auth;
+        let isFirebaseReady = false;
+        try {
+            app = initializeApp(firebaseConfig);
+            db = getFirestore(app);
+            auth = getAuth(app);
+            isFirebaseReady = true;
+        } catch(e) {
+            console.warn("Firebase initialization failed. Running in local memory mode.");
+        }
+
+        // State
+        let currentLang = 'en';
+        let currentTab = 'garbage';
+        let reportsData = []; 
+        let map, infoWindow;
+        let currentMapMarkers = [];
+        const TN_BOUNDS = {
+            south: 8.077,
+            west: 76.237,
+            north: 13.514,
+            east: 80.347
+        };
+
+        // Dictionaries
+        const dict = {
+            en: {
+                title: "Clean TamilNadu",
+                subtitle: "Real-time Civic Reporting",
+                toggleLang: "தமிழ்",
+                dashboard: "Dashboard",
+                dash_title: "Analytics Dashboard",
+                dash_overall: "Overall Information (Last 7 Days)",
+                dash_districtwise: "District-wise Breakdown",
+                total_label: "Total",
+                tab_garbage: "Garbage",
+                tab_sewage: "Sewage",
+                tab_water: "Pond/River",
+                tab_banner: "Banners",
+                count_garbage: "Garbage",
+                count_sewage: "Sewage",
+                count_water: "Water",
+                count_banner: "Banners",
+                msg_loc_error_title: "Location Error",
+                msg_loc_error_body: "Please enable GPS location to report an issue. We need exact coordinates.",
+                msg_verify_title: "Verifying Image...",
+                msg_verify_desc: "Checking image authenticity using AI...",
+                msg_mask_desc: "Masking human faces to protect privacy...",
+                msg_save_desc: "Saving securely...",
+                msg_success_title: "Report Submitted",
+                msg_success_body: "Your report has been securely added to the map.",
+                msg_reject_title: "Verification Failed",
+                msg_error_title: "Error",
+                unknown_village: "Unknown Area",
+                details_title: "Location Details"
+            },
+            ta: {
+                title: "தூய்மையான தமிழ்நாடு",
+                subtitle: "நிகழ்நேர புகார் தளம்",
+                toggleLang: "English",
+                dashboard: "முகப்பு",
+                dash_title: "பகுப்பாய்வு முகப்பு",
+                dash_overall: "ஒட்டுமொத்த தகவல் (கடந்த 7 நாட்கள்)",
+                dash_districtwise: "மாவட்ட வாரியான விவரங்கள்",
+                total_label: "மொத்தம்",
+                tab_garbage: "குப்பை",
+                tab_sewage: "கழிவுநீர்",
+                tab_water: "குளம்/ஆறு",
+                tab_banner: "பதாகைகள்",
+                count_garbage: "குப்பை",
+                count_sewage: "கழிவுநீர்",
+                count_water: "நீர்நிலை",
+                count_banner: "பதாகை",
+                msg_loc_error_title: "இடம் பிழை",
+                msg_loc_error_body: "புகாரளிக்க GPS இருப்பிடத்தை ஆன் செய்யவும்.",
+                msg_verify_title: "சரிபார்க்கிறது...",
+                msg_verify_desc: "AI மூலம் படத்தை சரிபார்க்கிறது...",
+                msg_mask_desc: "முகங்களை மறைக்கிறது...",
+                msg_save_desc: "சேமிக்கப்படுகிறது...",
+                msg_success_title: "வெற்றிகரமாக பதிவேற்றப்பட்டது",
+                msg_success_body: "உங்கள் புகார் வரைபடத்தில் சேர்க்கப்பட்டது.",
+                msg_reject_title: "நிராகரிக்கப்பட்டது",
+                msg_error_title: "பிழை",
+                unknown_village: "தெரியாத பகுதி",
+                details_title: "இட விவரங்கள்"
+            }
+        };
+
+        // ==========================================
+        // 2. UI & Interaction Logic
+        // ==========================================
+        
+        function updateTranslations() {
+            const t = dict[currentLang];
+            document.getElementById('app-title').textContent = t.title;
+            document.getElementById('app-subtitle').textContent = t.subtitle;
+            document.getElementById('lang-toggle').textContent = t.toggleLang;
+            document.getElementById('lang-dashboard').textContent = t.dashboard;
+            
+            document.getElementById('tab-garbage').textContent = t.tab_garbage;
+            document.getElementById('tab-sewage').textContent = t.tab_sewage;
+            document.getElementById('tab-water').textContent = t.tab_water;
+            document.getElementById('tab-banner').textContent = t.tab_banner;
+            
+            document.getElementById('label-garbage-count').textContent = t.count_garbage;
+            document.getElementById('label-sewage-count').textContent = t.count_sewage;
+            document.getElementById('label-water-count').textContent = t.count_water;
+            document.getElementById('label-banner-count').textContent = t.count_banner;
+
+            // Dashboard translations
+            document.getElementById('dash-title').textContent = t.dash_title;
+            document.getElementById('dash-overall').textContent = t.dash_overall;
+            document.getElementById('dash-districtwise').textContent = t.dash_districtwise;
+            document.getElementById('dash-label-garbage').textContent = t.count_garbage;
+            document.getElementById('dash-label-sewage').textContent = t.count_sewage;
+            document.getElementById('dash-label-water').textContent = t.count_water;
+            document.getElementById('dash-label-banner').textContent = t.count_banner;
+
+            if (map) renderMapMarkers(); 
+            if (!document.getElementById('dashboard-overlay').classList.contains('hidden')) {
+                renderDashboardData(); // Re-render to update text inside generated district cards
+            }
+        }
+
+        document.getElementById('lang-toggle').addEventListener('click', () => {
+            currentLang = currentLang === 'en' ? 'ta' : 'en';
+            updateTranslations();
+        });
+
+        // Tab Switching
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                document.querySelectorAll('.tab-btn').forEach(b => {
+                    b.classList.remove('border-blue-600', 'text-blue-600');
+                    b.classList.add('border-transparent', 'text-slate-500');
+                });
+                const target = e.currentTarget;
+                target.classList.remove('border-transparent', 'text-slate-500');
+                target.classList.add('border-blue-600', 'text-blue-600');
+                
+                currentTab = target.dataset.tab;
+                if(map) renderMapMarkers();
+            });
+        });
+
+        // Modals & Loaders
+        function showLoader(titleKey, descKey) {
+            document.getElementById('loading-title').textContent = dict[currentLang][titleKey] || titleKey;
+            document.getElementById('loading-desc').textContent = dict[currentLang][descKey] || descKey;
+            document.getElementById('loading-overlay').classList.remove('hidden');
+            document.getElementById('loading-overlay').classList.add('flex');
+        }
+
+        function hideLoader() {
+            document.getElementById('loading-overlay').classList.add('hidden');
+            document.getElementById('loading-overlay').classList.remove('flex');
+        }
+
+        function showMessage(titleKey, bodyText, isError = false) {
+            document.getElementById('message-title').textContent = dict[currentLang][titleKey] || titleKey;
+            document.getElementById('message-body').textContent = bodyText;
+            document.getElementById('message-icon').innerHTML = isError ? 
+                '<i class="ph-fill ph-warning-circle text-red-500"></i>' : 
+                '<i class="ph-fill ph-check-circle text-green-500"></i>';
+            document.getElementById('message-modal').classList.remove('hidden');
+            document.getElementById('message-modal').classList.add('flex');
+        }
+
+        document.getElementById('message-close').addEventListener('click', () => {
+            document.getElementById('message-modal').classList.add('hidden');
+            document.getElementById('message-modal').classList.remove('flex');
+        });
+
+        // Dashboard Logic
+        document.getElementById('btn-dashboard').addEventListener('click', () => {
+            renderDashboardData();
+            document.getElementById('dashboard-overlay').classList.remove('hidden');
+            document.getElementById('dashboard-overlay').classList.add('flex');
+        });
+
+        document.getElementById('close-dashboard').addEventListener('click', () => {
+            document.getElementById('dashboard-overlay').classList.add('hidden');
+            document.getElementById('dashboard-overlay').classList.remove('flex');
+        });
+
+        function renderDashboardData() {
+            const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
+            let overall = { garbage: 0, sewage: 0, water: 0, banner: 0 };
+            let districts = {};
+            const t = dict[currentLang];
+
+            reportsData.forEach(report => {
+                if (report.timestamp < sevenDaysAgo) return;
+                
+                overall[report.category] = (overall[report.category] || 0) + 1;
+                
+                let distName = report.address?.state_district || report.address?.city || t.unknown_village;
+                distName = distName.replace(/ District/i, '').trim();
+
+                if(!districts[distName]) {
+                    districts[distName] = { total: 0, garbage: 0, sewage: 0, water: 0, banner: 0 };
+                }
+                districts[distName].total++;
+                districts[distName][report.category]++;
+            });
+
+            // Update overall DOM
+            document.getElementById('dash-count-garbage').textContent = overall.garbage;
+            document.getElementById('dash-count-sewage').textContent = overall.sewage;
+            document.getElementById('dash-count-water').textContent = overall.water;
+            document.getElementById('dash-count-banner').textContent = overall.banner;
+
+            // Update district DOM
+            const distContainer = document.getElementById('district-list');
+            distContainer.innerHTML = '';
+            
+            const sortedDistricts = Object.keys(districts).sort((a,b) => districts[b].total - districts[a].total);
+
+            if (sortedDistricts.length === 0) {
+                distContainer.innerHTML = `<p class="text-slate-500 text-center py-4">No data available for the last 7 days.</p>`;
+                return;
+            }
+
+            sortedDistricts.forEach(dist => {
+                const data = districts[dist];
+                const html = `
+                    <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-100">
+                        <div class="flex justify-between items-center mb-3 border-b pb-2">
+                            <h3 class="font-bold text-slate-800">${dist}</h3>
+                            <span class="bg-blue-100 text-blue-800 text-xs font-bold px-2.5 py-1 rounded-full">${data.total} ${t.total_label}</span>
+                        </div>
+                        <div class="grid grid-cols-4 gap-2 text-center text-xs">
+                            <div class="bg-orange-50/50 rounded p-1"><span class="block text-orange-500 font-bold text-sm">${data.garbage}</span><span class="text-slate-500">${t.count_garbage}</span></div>
+                            <div class="bg-amber-50/50 rounded p-1"><span class="block text-amber-700 font-bold text-sm">${data.sewage}</span><span class="text-slate-500">${t.count_sewage}</span></div>
+                            <div class="bg-blue-50/50 rounded p-1"><span class="block text-blue-500 font-bold text-sm">${data.water}</span><span class="text-slate-500">${t.count_water}</span></div>
+                            <div class="bg-purple-50/50 rounded p-1"><span class="block text-purple-600 font-bold text-sm">${data.banner}</span><span class="text-slate-500">${t.count_banner}</span></div>
+                        </div>
+                    </div>
+                `;
+                distContainer.innerHTML += html;
+            });
+        }
+
+
+        // ==========================================
+        // 3. Map & Location Logic
+        // ==========================================
+        
+        function initMap() {
+            try {
+                if (!window.google || !window.google.maps) {
+                    throw new Error("Google Maps API did not load.");
+                }
+
+                // Clear out loading message
+                document.getElementById('map').innerHTML = '';
+
+                map = new google.maps.Map(document.getElementById('map'), {
+                    zoom: 7,
+                    center: { lat: 11.1271, lng: 78.6569 },
+                    restriction: {
+                        latLngBounds: TN_BOUNDS,
+                        strictBounds: false,
+                    },
+                    disableDefaultUI: true, 
+                    zoomControl: false,
+                    mapTypeId: google.maps.MapTypeId.ROADMAP
+                });
+                infoWindow = new google.maps.InfoWindow();
+                
+                // Show camera fab now that map works
+                document.getElementById('fab-camera').classList.remove('hidden');
+            } catch (error) {
+                console.error("Map initialization error:", error);
+                window.gm_authFailure();
+            }
+        }
+
+        function renderMapMarkers() {
+            currentMapMarkers.forEach(marker => marker.setMap(null));
+            currentMapMarkers = [];
+
+            if (!map) return;
+            
+            const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
+            let counts = { garbage: 0, sewage: 0, water: 0, banner: 0 };
+
+            reportsData.forEach(report => {
+                if (report.timestamp < sevenDaysAgo) return;
+
+                counts[report.category] = (counts[report.category] || 0) + 1;
+
+                if (report.category === currentTab) {
+                    const marker = new google.maps.Marker({
+                        position: { lat: report.lat, lng: report.lng },
+                        map: map,
+                        icon: {
+                            path: google.maps.SymbolPath.CIRCLE,
+                            scale: 8,
+                            fillColor: "#ef4444", 
+                            fillOpacity: 0.8,
+                            strokeColor: "#ffffff",
+                            strokeWeight: 2,
+                        }
+                    });
+
+                    const t = dict[currentLang];
+                    const addr = report.address || {};
+                    const popupContent = `
+                        <div class="w-48 font-sans p-1">
+                            <img src="${report.image}" class="w-full h-32 object-cover rounded-t-lg border-b mb-2 bg-gray-100" />
+                            <div class="px-1 pb-1">
+                                <h4 class="font-bold text-sm mb-1 text-slate-800">${t.details_title}</h4>
+                                <p class="text-xs text-slate-600 mb-0.5"><b>Village/Town:</b> ${addr.village || addr.town || addr.city || t.unknown_village}</p>
+                                <p class="text-xs text-slate-600 mb-0.5"><b>Taluk/County:</b> ${addr.county || 'N/A'}</p>
+                                <p class="text-xs text-slate-600 mb-0.5"><b>District:</b> ${addr.state_district || 'N/A'}</p>
+                                <p class="text-xs text-slate-400 mt-2 text-right">${new Date(report.timestamp).toLocaleDateString()}</p>
+                            </div>
+                        </div>
+                    `;
+                    
+                    marker.addListener("click", () => {
+                        infoWindow.setContent(popupContent);
+                        infoWindow.open({
+                            anchor: marker,
+                            map,
+                            shouldFocus: false,
+                        });
+                    });
+
+                    currentMapMarkers.push(marker);
+                }
+            });
+
+            document.getElementById('count-garbage').textContent = counts.garbage;
+            document.getElementById('count-sewage').textContent = counts.sewage;
+            document.getElementById('count-water').textContent = counts.water;
+            document.getElementById('count-banner').textContent = counts.banner;
+        }
+
+        // ==========================================
+        // 4. Data Initialization
+        // ==========================================
+        
+        async function initApp() {
+            initMap();
+            updateTranslations();
+
+            if (isFirebaseReady) {
+                try {
+                    const customToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+                    if(customToken) {
+                        await signInWithCustomToken(auth, customToken); 
+                    } else {
+                        await signInAnonymously(auth);
+                    }
+
+                    const reportsRef = collection(db, 'artifacts', appId, 'public', 'data', 'reports');
+                    onSnapshot(reportsRef, (snapshot) => {
+                        const newReports = [];
+                        snapshot.forEach((doc) => {
+                            newReports.push({ id: doc.id, ...doc.data() });
+                        });
+                        reportsData = newReports;
+                        if(map) renderMapMarkers();
+                    }, (error) => {
+                        console.error("Firestore Listen Error:", error);
+                    });
+
+                } catch (error) {
+                    console.error("Auth / Firestore error:", error);
+                    setupLocalFallback();
+                }
+            } else {
+                setupLocalFallback();
+            }
+        }
+
+        function setupLocalFallback() {
+            reportsData = [
+                {
+                    category: 'garbage', lat: 13.0827, lng: 80.2707, timestamp: Date.now(),
+                    address: { city: "Chennai", state_district: "Chennai District" },
+                    image: "https://placehold.co/400x300/e2e8f0/475569?text=Garbage"
+                }
+            ];
+            if(map) renderMapMarkers();
+        }
+
+        window.onload = initApp;
+
+    </script>
+</body>
+</html>
